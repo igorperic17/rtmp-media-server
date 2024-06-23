@@ -32,49 +32,45 @@ wss.on('connection', (ws) => {
   const stream = new PassThrough();
 
   ws.on('message', (message) => {
-    let stringMessage;
-    if (Buffer.isBuffer(message)) {
-      stringMessage = message.toString();
-    } else {
-      stringMessage = message;
-    }
+    // Check if message is a Buffer and try to parse it as JSON
+    try {
+      const jsonString = message.toString('utf8');
+      const { rtmpUrl } = JSON.parse(jsonString);
+      console.log(`Received RTMP URL: ${rtmpUrl}`);
+      command = ffmpeg()
+        .input(stream)
+        .inputFormat('webm')
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .format('flv')
+        .outputOptions('-preset', 'veryfast')
+        .outputOptions('-tune', 'zerolatency')
+        .outputOptions('-f', 'flv')
+        .outputOptions('-g', '50')
+        .outputOptions('-keyint_min', '50')
+        .outputOptions('-sc_threshold', '0')
+        .outputOptions('-b:v', '2500k')
+        .outputOptions('-maxrate', '2500k')
+        .outputOptions('-bufsize', '5000k')
+        .outputOptions('-b:a', '128k')
+        .output(rtmpUrl)
+        .on('start', () => {
+          console.log(`FFmpeg started with URL: ${rtmpUrl}`);
+        })
+        .on('stderr', (stderrLine) => {
+          console.log('FFmpeg STDERR:', stderrLine);
+        })
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err);
+          ws.close();
+        })
+        .on('end', () => {
+          console.log('FFmpeg ended');
+        });
 
-    if (stringMessage.includes('rtmpUrl')) {
-      console.log("received server url")
-      try {
-        const { rtmpUrl } = JSON.parse(stringMessage);
-        console.log(`Received RTMP URL: ${rtmpUrl}`);
-        command = ffmpeg()
-          .input(stream)
-          .inputFormat('webm')
-          .videoCodec('libx264')
-          .audioCodec('aac')
-          .format('flv')
-          .outputOptions('-preset', 'veryfast')
-          .outputOptions('-tune', 'zerolatency')
-          .output(rtmpUrl)
-          .on('start', () => {
-            console.log('FFmpeg started with URL:', rtmpUrl);
-          })
-          .on('codecData', (data) => {
-            console.log('Input is', data);
-          })
-          .on('progress', (progress) => {
-            console.log('Processing: ' + progress.percent + '% done');
-          })
-          .on('error', (err) => {
-            console.error('FFmpeg error:', err.message);
-            ws.close();
-          })
-          .on('end', () => {
-            console.log('FFmpeg ended');
-          });
-
-        command.run();
-      } catch (error) {
-        console.error('Error parsing RTMP URL message:', error);
-      }
-    } else {
+      command.run();
+    } catch (error) {
+      // If JSON parsing fails, treat it as media data
       console.log('Received data chunk');
       stream.write(message);
     }
