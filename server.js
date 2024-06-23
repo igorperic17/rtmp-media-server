@@ -32,33 +32,33 @@ wss.on('connection', (ws) => {
   const stream = new PassThrough();
 
   ws.on('message', (message) => {
-    // Check if message is a Buffer and try to parse it as JSON
     try {
-      const jsonString = message.toString('utf8');
-      const { rtmpUrl } = JSON.parse(jsonString);
-      console.log(`Received RTMP URL: ${rtmpUrl}`);
+      const parsedMessage = JSON.parse(message);
+      const { rtmpUrl } = parsedMessage;
+      console.log(`RTMP URL received: ${rtmpUrl}`);
       command = ffmpeg()
         .input(stream)
         .inputFormat('webm')
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .format('flv')
-        .outputOptions('-preset', 'veryfast')
-        .outputOptions('-tune', 'zerolatency')
-        .outputOptions('-f', 'flv')
-        .outputOptions('-g', '50')
-        .outputOptions('-keyint_min', '50')
-        .outputOptions('-sc_threshold', '0')
-        .outputOptions('-b:v', '2500k')
-        .outputOptions('-maxrate', '2500k')
-        .outputOptions('-bufsize', '5000k')
-        .outputOptions('-b:a', '128k')
+        // .videoCodec('libx264')
+        // .audioCodec('aac')
+        .outputOptions([
+          '-f flv',
+          '-preset veryfast',
+          '-tune zerolatency',
+          '-maxrate 3000k',
+          '-bufsize 6000k',
+          '-pix_fmt yuv420p',
+          '-g 50',
+          '-c:a aac',
+          '-b:a 160k',
+          '-ar 44100',
+        ])
         .output(rtmpUrl)
         .on('start', () => {
-          console.log(`FFmpeg started with URL: ${rtmpUrl}`);
+          console.log('FFmpeg started');
         })
         .on('stderr', (stderrLine) => {
-          console.log('FFmpeg STDERR:', stderrLine);
+          console.log('FFmpeg stderr:', stderrLine);
         })
         .on('error', (err) => {
           console.error('FFmpeg error:', err);
@@ -70,7 +70,6 @@ wss.on('connection', (ws) => {
 
       command.run();
     } catch (error) {
-      // If JSON parsing fails, treat it as media data
       console.log('Received data chunk');
       stream.write(message);
     }
